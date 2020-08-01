@@ -1,0 +1,19 @@
+{
+  "name": "bit-io",
+  "version": "1.0.0",
+  "description": "Allows easy handling of bitwise data that is not byte aligned",
+  "main": "index.js",
+  "scripts": {
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "keywords": [],
+  "author": "Matthew Cornelisse",
+  "license": "MIT",
+  "dependencies": {
+    "base58check": "^2.0.0",
+    "bech32": "^1.1.4"
+  },
+  "devDependencies": {
+    "nodeunit": "^0.11.3"
+  }
+}
