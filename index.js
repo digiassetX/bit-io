@@ -1,5 +1,7 @@
 const base58check=require('base58check');
 const bech32=require('bech32');
+const nacl=require('tweetnacl');
+
 const digibyte= /** @type {CryptoNetwork} */{
     messagePrefix: '\x19DigiByte Signed Message:\\n',
     bech32: 'dgb',
@@ -473,7 +475,6 @@ class BitIO {
      * Error check bits
      * @param {string}  value
      * @param {int}     x
-     * @private
      */
     static makeXBitVariableLength(value,x) {
         if (
@@ -530,7 +531,6 @@ class BitIO {
      * @param {int} value
      * @param {int} length
      * @return {string}
-     * @private
      */
     static makeInt(value,length) {
         if ((value < 0) || (value!==Math.min(value))) throw new Error("Invalid Input Type");    //throw error if can't be included
@@ -590,7 +590,6 @@ class BitIO {
     /**
      * Converts message to binary
      * @param {string}  message
-     * @private
      */
     static makeAlpha(message) {
         const charSet="0123456789abcdefghijklmnopqrstuvwxyz $%*+-./:";
@@ -685,7 +684,6 @@ class BitIO {
      * nodejs does not seem to handle 4 byte unicode symbols.  But code for it is included if ported to other languages
      * @param {string}  message
      * @return {string}
-     * @private
      */
     static makeUTF8(message) {
         let binary='';
@@ -756,7 +754,6 @@ class BitIO {
      * Returns binary value for a hex string
      * @param {string}  value
      * @return {string}
-     * @private
      */
     static makeHex(value) {
         if (!isHex.test(value)) throw new Error("Invalid Input Type");    //throw error if can't be included
@@ -823,7 +820,6 @@ class BitIO {
      * Returns binary from string
      * @param {string}  value
      * @return {string}
-     * @private
      */
     static make3B40(value) {
         const charSet="0123456789abcdefghijklmnopqrstuvwxyz#$&.";
@@ -909,7 +905,6 @@ class BitIO {
      * @param {string}  address
      * @param {CryptoNetwork}   network
      * @return {string}
-     * @private
      */
     static makeAddress(address,network=digibyte) {
         //determine address type by length
@@ -1162,10 +1157,144 @@ class BitIO {
         this.insertBits(BitIO.makeBitcoin(message),updatePointer);
     }
 
+
+
+
+
+
+    /*
+    ███████╗███╗   ██╗ ██████╗██████╗ ██╗   ██╗██████╗ ████████╗███████╗██████╗
+    ██╔════╝████╗  ██║██╔════╝██╔══██╗╚██╗ ██╔╝██╔══██╗╚══██╔══╝██╔════╝██╔══██╗
+    █████╗  ██╔██╗ ██║██║     ██████╔╝ ╚████╔╝ ██████╔╝   ██║   █████╗  ██║  ██║
+    ██╔══╝  ██║╚██╗██║██║     ██╔══██╗  ╚██╔╝  ██╔═══╝    ██║   ██╔══╝  ██║  ██║
+    ███████╗██║ ╚████║╚██████╗██║  ██║   ██║   ██║        ██║   ███████╗██████╔╝
+    ╚══════╝╚═╝  ╚═══╝ ╚═════╝╚═╝  ╚═╝   ╚═╝   ╚═╝        ╚═╝   ╚══════╝╚═════╝
+     */
+
+    /**
+     * Gets and decrypts a Buffer
+     * @param {string|Uint8Array}  decryptionPrivateKey
+     * @return {Buffer}
+     */
+    getEncrypted(decryptionPrivateKey) {
+        //copy pointer
+        let start=this.pointer;
+
+        //get date needed
+        const length = this.getFixedPrecision();                       //length of encoded data
+        const user = new Uint8Array(this.getBuffer(32));   //encrypted public key(generated at random)
+        const nonce = new Uint8Array(this.getBuffer(24));  //nonce value
+        const box = new Uint8Array(this.getBuffer(length));        //the encrypted data
+
+        //convert key to Uint8Array if not already
+        if (typeof decryptionPrivateKey==="string") {
+            let key = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) key[i] = parseInt(decryptionPrivateKey.substr(2 * i, 2), 16);
+            decryptionPrivateKey=key;
+        }
+
+        //decrypt encrypted data
+        const message = nacl.box.open(box, nonce, user, decryptionPrivateKey);
+        if (message===null) {
+            this.pointer=start;
+            throw new Error("Invalid Key");
+        }
+
+        //make output a buffer
+        return Buffer.from(message);
+    }
+
+    // noinspection JSCheckFunctionSignatures
+    /**
+     * Encrypts and stores a Buffer.  If encryptionPrivateKey is left blank a random one is created
+     *
+     * There are 73+x bytes of overhead in this encryption(x is generally a very small number sample below)
+     *   data.length:
+     *   0-31:     x=0
+     *   32-511:   x=1
+     *   512-99999:x=2 or 3
+     *   ...
+     *
+     * @param {Buffer}  data
+     * @param {string|Uint8Array}  decryptionPublicKey
+     * @param {string|Uint8Array}  encryptionPrivateKey
+     * @return {string}
+     */
+    static makeEncrypted(data,decryptionPublicKey,encryptionPrivateKey=undefined) {
+        //convert data to Uint8Array
+        // noinspection JSCheckFunctionSignatures
+        let message = new Uint8Array(data.buffer, data.byteOffset, data.byteLength);
+
+        //convert key to Uint8Array
+        if (typeof decryptionPublicKey==="string") {
+            let key = new Uint8Array(32);
+            for (let i = 0; i < 32; i++) key[i] = parseInt(decryptionPublicKey.substr(2 * i, 2), 16);
+            decryptionPublicKey=key;
+        }
+
+        //generate a key pair for user
+        let user;
+        if (encryptionPrivateKey===undefined) {
+
+            //create random pair
+            user=nacl.box.keyPair();
+
+        } else {
+
+            //create pair from private key
+            if (typeof encryptionPrivateKey==="string") {
+                let key = new Uint8Array(32);
+                for (let i = 0; i < 32; i++) key[i] = parseInt(encryptionPrivateKey.substr(2 * i, 2), 16);
+                encryptionPrivateKey=key;
+            }
+            user=nacl.box.keyPair.fromSecretKey(encryptionPrivateKey);
+
+        }
+
+        //generate random nonce
+        const nonce = nacl.randomBytes(24);
+
+        //encrypt message
+        const box = nacl.box(
+            message,
+            nonce,
+            decryptionPublicKey,
+            user.secretKey
+        )
+
+        //compile payload
+        let binary=this.makeFixedPrecision(box.length);         //variable length
+        binary+=this.makeBuffer(Buffer.from(user.publicKey));   //32 bytes
+        binary+=this.makeBuffer(Buffer.from(nonce));            //24 bytes
+        binary+=this.makeBuffer(Buffer.from(box));              //variable length
+        return binary;
+    }
+
+    /**
+     * Insert value at end
+     * DOES NOT EFFECT POINTER
+     * @param {Buffer}  data
+     * @param {string|Uint8Array}  decryptionPublicKey
+     * @param {string|Uint8Array}  encryptionPrivateKey
+     */
+    appendEncrypted(data,decryptionPublicKey,encryptionPrivateKey=undefined) {
+        this.appendBits(BitIO.makeEncrypted(data,decryptionPublicKey,encryptionPrivateKey));
+    }
+
+    /**
+     * Insert value wherever pointer is
+     * @param {Buffer}  data
+     * @param {string|Uint8Array}  decryptionPublicKey
+     * @param {string|Uint8Array}  encryptionPrivateKey
+     * @param {boolean} updatePointer
+     */
+    insertEncrypted(data,decryptionPublicKey,encryptionPrivateKey=undefined,updatePointer=true) {
+        this.insertBits(BitIO.makeEncrypted(data,decryptionPublicKey,encryptionPrivateKey),updatePointer);
+    }
+
+
+
+
+
 }
 module.exports=BitIO;
-/*
-let test=new BitIO();
-test.appendAddress('DFHvtSCQRjfeEHX7JFhJ3JML8BihQ5DNMz');
-
- */

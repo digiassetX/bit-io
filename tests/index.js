@@ -1,6 +1,13 @@
 require('nodeunit');
 const BitIO = require('../index'),
     events = require('events');
+const nacl=require('tweetnacl');
+
+const makeRandom=(length)=>{
+    let data=Buffer.alloc(length);
+    for (let i=0;i<length;i++) data[i]=Math.floor(Math.random()*256);
+    return data;
+}
 
 module.exports = {
     'test Bits': function(test) {
@@ -199,6 +206,14 @@ module.exports = {
         io.pointer=0;
         test.equal(io.padOne(50));
         test.equal(io.length,250);
+        test.done();
+    },
+    'Test encryption:': function(test) {
+        let io=new BitIO();
+        let message=makeRandom(100);
+        let pair=nacl.box.keyPair();
+        io.appendEncrypted(message,pair.publicKey);
+        test.equal(Buffer.compare(io.getEncrypted(pair.secretKey),message),0);
         test.done();
     }
 
