@@ -1,6 +1,6 @@
 {
   "name": "bit-io",
-  "version": "1.0.2",
+  "version": "1.0.6",
   "description": "Allows easy handling of bitwise data that is not byte aligned",
   "main": "index.js",
   "scripts": {
@@ -11,11 +11,12 @@
   "license": "MIT",
   "dependencies": {
     "base58check": "^2.0.0",
-    "bech32": "^1.1.4",
+    "bech32": "^2.0.0",
     "tweetnacl": "^1.0.3"
   },
   "devDependencies": {
-    "nodeunit": "^0.11.3"
+    "mocha": "^8.4.0",
+    "chai": "^4.3.4"
   },
   "repository": {
     "type": "git",

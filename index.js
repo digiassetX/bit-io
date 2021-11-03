@@ -1,5 +1,5 @@
 const base58check=require('base58check');
-const bech32=require('bech32');
+const {bech32}=require('bech32');
 const nacl=require('tweetnacl');
 
 const digibyte= /** @type {CryptoNetwork} */{
@@ -14,6 +14,8 @@ const digibyte= /** @type {CryptoNetwork} */{
     wif: 0x80,
 };
 
+const ChatSet3B40="0123456789abcdefghijklmnopqrstuvwxyz#$&.";
+const ChatSetAlpha="0123456789abcdefghijklmnopqrstuvwxyz $%*+-./:";
 const isBinary=/^[01]+$/;
 const isHex = /^[0-9a-fA-F]+$/;
 const bitcoinOpCodes= {
@@ -134,7 +136,7 @@ let CryptoNetwork;
                             removed
         Hex:                encodes a string made up of hexadecimal characters
         3B40:               designed for file extensions.  efficiently encodes strings made of only
-                            0123456789abcdefghijklmnopqrstuvwxyz#$&_ characters
+                            0123456789abcdefghijklmnopqrstuvwxyz#$&. characters
 
 
     Encoding formats not requiring length value:
@@ -505,7 +507,56 @@ class BitIO {
         this.insertBits(BitIO.makeXBitVariableLength(value,x),updatePointer);
     }
 
+    /*
+    ██████╗ ██╗ ██████╗ ██╗███╗   ██╗████████╗
+    ██╔══██╗██║██╔════╝ ██║████╗  ██║╚══██╔══╝
+    ██████╔╝██║██║  ███╗██║██╔██╗ ██║   ██║
+    ██╔══██╗██║██║   ██║██║██║╚██╗██║   ██║
+    ██████╔╝██║╚██████╔╝██║██║ ╚████║   ██║
+    ╚═════╝ ╚═╝ ╚═════╝ ╚═╝╚═╝  ╚═══╝   ╚═╝
+     */
 
+    /**
+     * Returns unsigned int of bits length.  Warning 31 bit max
+     * @param {int} length
+     * @return {BigInt}
+     */
+    getBigInt(length) {
+        return BigInt("0b"+this.getBits(length));
+    }
+
+    /**
+     * Returns binary for an integer
+     * @param {BigInt} value
+     * @param {int} length
+     * @return {string}
+     */
+    static makeBigInt(value,length) {
+        if (typeof value ==="bigint") throw new Error("Invalid Input Type");    //throw error if can't be included
+        if (value>=Math.pow(2,length)) throw new Error("Length to short to encode");
+        // noinspection JSCheckFunctionSignatures
+        return value.toString(2).padStart(length,'0');
+    }
+
+    /**
+     * Insert integer at end
+     * DOES NOT EFFECT POINTER
+     * @param {BigInt} value
+     * @param {int} length
+     */
+    appendBigInt(value,length) {
+        this.appendBits(BitIO.makeBigInt(value,length));
+    }
+
+    /**
+     * Insert integer wherever pointer is
+     * @param {BigInt} value
+     * @param {int} length
+     * @param {boolean} updatePointer
+     */
+    insertBigInt(value,length,updatePointer=true) {
+        this.insertBits(BitIO.makeBigInt(value,length),updatePointer);
+    }
 
     /*
     ██╗███╗   ██╗████████╗███████╗ ██████╗ ███████╗██████╗
@@ -574,7 +625,7 @@ class BitIO {
      * @return {string}
      */
     getAlpha(length) {
-        const charSet="0123456789abcdefghijklmnopqrstuvwxyz $%*+-./:";
+        const charSet=ChatSetAlpha;
         let message="";
         for (let i=0;i<Math.floor(length/2);i++) {
             let chars=this.getInt(11);
@@ -592,7 +643,7 @@ class BitIO {
      * @param {string}  message
      */
     static makeAlpha(message) {
-        const charSet="0123456789abcdefghijklmnopqrstuvwxyz $%*+-./:";
+        const charSet=ChatSetAlpha;
         let binary="";
         let val=0;
         for (let i=0;i<message.length;i++) {
@@ -802,7 +853,7 @@ class BitIO {
      * @return {string}
      */
     get3B40(length) {
-        const charSet="0123456789abcdefghijklmnopqrstuvwxyz#$&_";
+        const charSet=ChatSet3B40;
         let message="";
         for (let i=0;i<Math.floor(length/3);i++) {
             let chars=this.getInt(16);
@@ -822,7 +873,7 @@ class BitIO {
      * @return {string}
      */
     static make3B40(value) {
-        const charSet="0123456789abcdefghijklmnopqrstuvwxyz#$&.";
+        const charSet=ChatSet3B40;
         let message="";
         let val=0;
         for (let i=0;i<value.length;i++) {
@@ -959,7 +1010,7 @@ class BitIO {
     /**
      * Returns a int that was encoded using bitcoins precision encoding
      * valid number range 0-10,000,000,000,000,000
-     * @return {int}
+     * @return {BigInt}
      */
     getFixedPrecision() {
         //length encodes first 3 bits
@@ -972,66 +1023,71 @@ class BitIO {
         }
 
         //split into parts
-        let mantissa,exponent=0;
+        let mantissa,exponent=0n;
         if (length===1) {                                           //1 byte number
-            mantissa=this.getInt(5);
+            mantissa=this.getBigInt(5);
         } else if (length<5) {                                      //2 to 4 byte number
-            mantissa=this.getInt(length*8-7);
-            exponent=this.getInt(4);
+            mantissa=this.getBigInt(length*8-7);
+            exponent=this.getBigInt(4);
         } else if (length<7) {                                      //5 to 6 byte number
-            mantissa=this.getInt(length*8-6);
-            exponent=this.getInt(3);
+            mantissa=this.getBigInt(length*8-6);
+            exponent=this.getBigInt(3);
         } else {                                                    //7 byte number
-            mantissa=this.getInt(length*8-6);
+            mantissa=this.getBigInt(length*8-6);
         }
 
         //calculate the number and return
-        return mantissa*Math.pow(10,exponent);
+        return mantissa*(10n**exponent);
     }
 
     /**
      * Returns a int that was encoded using bitcoins precision encoding
      * valid number range 0-18,014,398,509,481,983
-     * @param {int} value
+     * @param {int|BigInt} value
      * @return {string}
      */
     static makeFixedPrecision(value) {
-        if ((value < 0) || (value > 18014398509481983) || (value!==Math.min(value))) throw new Error("Invalid Input Type");    //throw error if can't be included
+        if (
+            (typeof value!="bigint")&&
+            ((typeof value=="number")&&(value!==Math.min(value)))
+        ) throw new Error("Invalid Input Type");    //throw error if can't be included
+        value=BigInt(value);
+        if ((value < 0n) || (value > 18014398509481983n)) throw new Error("Invalid Input Type");    //throw error if can't be included
 
         //see if can be done as 1 byte
-        if (value<32) {
+        if (value<32n) {
             // noinspection JSCheckFunctionSignatures
             return value.toString(2).padStart(8,'0');
         }
 
         //compute exponent
-        let exponent=0;
-        while (value%10===0) {
+        let exponent=0n;
+        while (value%10n===0n) {
             exponent++;
-            value/=10;
+            value/=10n;
         }
-        if (value>4398046511103) {                  //max 0 exponent bits
-            value*=Math.pow(10,exponent);
-            exponent=0;
-        } else if ((value>33554431)&&(exponent>7)) {//max 3 exponent bits
-            value*=Math.pow(10,exponent-7);
-            exponent=7;
+        if (value>4398046511103n) {                  //max 0 exponent bits
+            value*=10n**exponent;
+            exponent=0n;
+        } else if ((value>33554431n)&&(exponent>7n)) {//max 3 exponent bits
+            value*=10n**(exponent-7n);
+            exponent=7n;
         }
 
         //return binary value
-        if (value>4398046511103) {          //7 bytes
+        if (value>4398046511103n) {          //7 bytes
             // noinspection JSCheckFunctionSignatures
             return "11"+value.toString(2).padStart(54,'0');
-        } else if (value>17179869183) {     //6 bytes
+        } else if (value>17179869183n) {     //6 bytes
             // noinspection JSCheckFunctionSignatures
             return "101"+value.toString(2).padStart(42,'0')+exponent.toString(2).padStart(3,'0');
-        } else if (value>33554431) {        //5 bytes
+        } else if (value>33554431n) {        //5 bytes
             // noinspection JSCheckFunctionSignatures
             return "100"+value.toString(2).padStart(34,'0')+exponent.toString(2).padStart(3,'0');
-        } else if (value>131071) {          //4 bytes
+        } else if (value>131071n) {          //4 bytes
             // noinspection JSCheckFunctionSignatures
             return "011"+value.toString(2).padStart(25,'0')+exponent.toString(2).padStart(4,'0');
-        } else if (value>511) {             //3 bytes
+        } else if (value>511n) {             //3 bytes
             // noinspection JSCheckFunctionSignatures
             return "010"+value.toString(2).padStart(17,'0')+exponent.toString(2).padStart(4,'0');
         } else {                            //2 bytes
@@ -1043,7 +1099,7 @@ class BitIO {
     /**
      * Insert number at end
      * DOES NOT EFFECT POINTER
-     * @param {int}  value
+     * @param {int|BigInt}  value
      */
     appendFixedPrecision(value) {
         this.appendBits(BitIO.makeFixedPrecision(value));
@@ -1051,7 +1107,7 @@ class BitIO {
 
     /**
      * Insert number wherever pointer is
-     * @param {int}  value
+     * @param {int|BigInt}  value
      * @param {boolean} updatePointer
      */
     insertFixedPrecision(value,updatePointer=true) {
@@ -1181,7 +1237,7 @@ class BitIO {
         let start=this.pointer;
 
         //get date needed
-        const length = this.getFixedPrecision();                       //length of encoded data
+        const length = parseInt(this.getFixedPrecision());                       //length of encoded data
         const user = new Uint8Array(this.getBuffer(32));   //encrypted public key(generated at random)
         const nonce = new Uint8Array(this.getBuffer(24));  //nonce value
         const box = new Uint8Array(this.getBuffer(length));        //the encrypted data
