@@ -863,7 +863,11 @@ class BitIO {
             message+=charSet[chars%40];
         }
         if (length%3===1) message+=charSet[this.getInt(5)];
-        if (length%3===2) message+=charSet[this.getInt(11)];
+        if (length%3===2) {
+            let chars=this.getInt(11);
+            message+=charSet[Math.floor(chars/40)];
+            message+=charSet[chars%40];
+        }
         return message;
     }
 
@@ -1033,7 +1037,7 @@ class BitIO {
             mantissa=this.getBigInt(length*8-6);
             exponent=this.getBigInt(3);
         } else {                                                    //7 byte number
-            mantissa=this.getBigInt(length*8-6);
+            mantissa=this.getBigInt(54);
         }
 
         //calculate the number and return

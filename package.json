@@ -1,6 +1,6 @@
 {
   "name": "bit-io",
-  "version": "1.0.6",
+  "version": "1.0.7",
   "description": "Allows easy handling of bitwise data that is not byte aligned",
   "main": "index.js",
   "scripts": {
